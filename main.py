@@ -14,8 +14,28 @@ template_one = PromptTemplate.from_template("""Act as a lead security engineer a
 ```
 Perform a security review, validate {scanner_name} finding and, if necessary, provide recommendations to improve the security posture of the codebase.""")
 
-llm_input = template_one.format(language_or_framework="XML", optional_codebase_details='', target_pathname='Drawing/Examples/Android/OdaAndroidApp/AndroidManifest.xml', scanner_name='The CodeQL scanner',vulnerability_type='Android debuggable attribute enabled', vulnerability_analysis='he Android manifest file defines configuration settings for Android applications. In this file, the android:debuggable attribute of the application element can be used to define whether or not the application can be debugged. When set to true, this attribute will allow the application to be debugged even when running on a device in user mode.', vulnerable_code_lines='<application android:icon="@drawable/icon" android:label="@string/app_name" android:debuggable="true">')
+def main():
+    language_or_framework = input("Enter the programming language or framework: ")
+    optional_codebase_details = input("Enter any optional codebase details (press Enter if none): ")
+    target_pathname = input("Enter the directory path of the code snippet: ")
+    scanner_name = input("Enter the name of the scanner: ")
+    vulnerability_type = input("Enter the potential vulnerability type: ")
+    vulnerability_analysis = input("Enter the vulnerability analysis: ")
+    vulnerable_code_lines = input("Enter the lines of code flagged as vulnerable: ")
 
+    llm_input = template_one.format(
+        language_or_framework=language_or_framework,
+        optional_codebase_details=optional_codebase_details,
+        target_pathname=target_pathname,
+        scanner_name=scanner_name,
+        vulnerability_type=vulnerability_type,
+        vulnerability_analysis=vulnerability_analysis,
+        vulnerable_code_lines=vulnerable_code_lines
+    )
 
-response = llm.invoke(llm_input)
-print(response.content)
+    response = llm.invoke(llm_input)
+    print("\nSecurity Review:")
+    print(response.content)
+
+if __name__ == "__main__":
+    main()
