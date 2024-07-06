@@ -1,7 +1,9 @@
+import json
+import argparse
+import subprocess
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
-import sys
 import os
 
 load_dotenv()
@@ -18,31 +20,70 @@ template_one = PromptTemplate.from_template("""
                                             Perform a security review, validate {scanner_name} finding and, if necessary, provide recommendations to improve the security posture of the codebase.
                                             """)
 
+def run_bandit_docker(code_file):
+    output_file = "sast_bandit.json"
+
+    command = [
+        "docker", "run", "--rm", "-v", f"{os.getcwd()}:/app", "ghcr.io/pycqa/bandit/bandit", f"/app/{code_file}",
+        "-f", "json", "-o", f"/app/{output_file}"
+    ]
+
+    try:
+        subprocess.check_call(command) # TODO: check why it always exits with status code error 1
+    except:
+        print('')
+
+    try:
+        with open(output_file, "r") as file:
+            bandit_output = json.load(file)
+        return bandit_output
+    except subprocess.CalledProcessError as e:
+        print(f"Error running Bandit: {e}")
+        exit(1)
+    finally:
+        os.remove(output_file)
+
+def process_bandit_output(bandit_output, verbose=False):
+    for finding in bandit_output["results"]:
+        main_code_snippet = finding["code"]
+        language_or_framework = "Python"
+        optional_codebase_details = ""
+        target_pathname = finding["filename"]
+        scanner_name = "Bandit"
+        vulnerability_type = finding["test_id"]
+        vulnerability_analysis = finding["issue_text"]
+        vulnerable_code_lines = finding["code"]
+
+        if verbose:
+            print(f"Processing finding for {target_pathname}")
+            print(f"Vulnerability type: {vulnerability_type}")
+            print(f"Vulnerability analysis: {vulnerability_analysis}")
+            print(f"Vulnerable code lines:\n{vulnerable_code_lines}")
+
+        llm_input = template_one.format(
+            main_code_snippet=main_code_snippet,
+            language_or_framework=language_or_framework,
+            optional_codebase_details=optional_codebase_details,
+            target_pathname=target_pathname,
+            scanner_name=scanner_name,
+            vulnerability_type=vulnerability_type,
+            vulnerability_analysis=vulnerability_analysis,
+            vulnerable_code_lines=vulnerable_code_lines
+        )
+
+        response = llm.invoke(llm_input)
+        print(f"\nSecurity Review for {target_pathname}:")
+        print(response.content)
+
 def main():
-    print("Submit the potentially vulnerable code snippet (press Ctrl+D or Ctrl+Z to finish):")
-    main_code_snippet = sys.stdin.read()
-    language_or_framework = input("Enter the programming language or framework: ")
-    optional_codebase_details = input("Enter any optional codebase details (press Enter if none): ")
-    target_pathname = input("Enter the directory path of the code snippet: ")
-    scanner_name = input("Enter the name of the scanner: ")
-    vulnerability_type = input("Enter the potential vulnerability type: ")
-    vulnerability_analysis = input("Enter the vulnerability analysis: ")
-    vulnerable_code_lines = input("Enter the lines of code flagged as vulnerable: ")
+    parser = argparse.ArgumentParser(description="Process Bandit SAST scanner output")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("-c", "--code", required=True, help="Code file to scan with Bandit")
+    args = parser.parse_args()
 
-    llm_input = template_one.format(
-        main_code_snippet=main_code_snippet,
-        language_or_framework=language_or_framework,
-        optional_codebase_details=optional_codebase_details,
-        target_pathname=target_pathname,
-        scanner_name=scanner_name,
-        vulnerability_type=vulnerability_type,
-        vulnerability_analysis=vulnerability_analysis,
-        vulnerable_code_lines=vulnerable_code_lines
-    )
-
-    response = llm.invoke(llm_input)
-    print("\nSecurity Review:")
-    print(response.content)
+    code_file = args.code
+    bandit_output = run_bandit_docker(code_file)
+    process_bandit_output(bandit_output, args.verbose)
 
 if __name__ == "__main__":
     main()
